@@ -9,7 +9,7 @@ use core::convert::TryFrom;
 use core::f32::consts::SQRT_2;
 use core::fmt;
 
-use embedded_io::{Read, Write};
+use embedded_io_async::{Read, Write};
 
 #[doc(inline)]
 pub use self::reg::{ReadableRegister, Register, WritableRegister};
@@ -510,26 +510,26 @@ where
 /// via UART.
 ///
 /// This simply calls `read_request` internally before writing the request via `U::bwrite_all`.
-pub fn send_read_request<R, U>(slave_addr: u8, mut uart_tx: U) -> Result<(), U::Error>
+pub async fn send_read_request<R, U>(slave_addr: u8, mut uart_tx: U) -> Result<(), U::Error>
 where
     R: reg::ReadableRegister,
     U: Write,
 {
     let req = read_request::<R>(slave_addr);
-    uart_tx.write_all(req.bytes())
+    uart_tx.write_all(req.bytes()).await
 }
 
 /// Construct a write access datagram for register `R` of the slave at the given address and
 /// send it via UART.
 ///
 /// This simply calls `write_request` internally before writing the request via `U::bwrite_all`.
-pub fn send_write_request<R, U>(slave_addr: u8, reg: R, mut uart_tx: U) -> Result<(), U::Error>
+pub async fn send_write_request<R, U>(slave_addr: u8, reg: R, mut uart_tx: U) -> Result<(), U::Error>
 where
     R: WritableRegister,
     U: Write,
 {
     let req = write_request(slave_addr, reg);
-    uart_tx.write_all(req.bytes())
+    uart_tx.write_all(req.bytes()).await
 }
 
 /// Blocks and attempts to read a response from the given UART receiver.
@@ -543,14 +543,14 @@ where
 /// duration and return with a timeout error in the case that the duration is exceeded before a
 /// response can be read. In the meantime, consider using the `Reader` and its `read_response`
 /// method directly to avoid blocking or apply your own timeout logic.
-pub fn await_read_response<U>(mut uart_rx: U) -> ReadResponse
+pub async fn await_read_response<U>(mut uart_rx: U) -> ReadResponse
 where
     U: Read,
 {
     let mut reader = Reader::default();
     let mut buf = [0u8; 128];
     loop {
-        if uart_rx.read(&mut buf).is_ok() {
+        if uart_rx.read(&mut buf).await.is_ok() {
             if let (_, Some(response)) = reader.read_response(&buf) {
                 return response;
             }
@@ -572,12 +572,12 @@ where
 /// duration and return with a timeout error in the case that the duration is exceeded before a
 /// response can be read. In the meantime, consider using the `Reader` and its `read_response`
 /// method directly to avoid blocking or apply your own timeout logic.
-pub fn await_read<R, U>(uart_rx: U) -> Result<R, reg::UnknownAddress>
+pub async fn await_read<R, U>(uart_rx: U) -> Result<R, reg::UnknownAddress>
 where
     R: ReadableRegister,
     U: Read,
 {
-    let res = await_read_response(uart_rx);
+    let res = await_read_response(uart_rx).await;
     res.register::<R>()
 }
 
